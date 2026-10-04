@@ -1,0 +1,9 @@
+{
+  "generated": "2026-10-04T12:39:31",
+  "logs": [
+    "logs\\falsealarm"
+  ],
+  "rule": "Stop a model with zero confirmed report_incident hits across Minimal and Informative in Stage 1.",
+  "review_complete": true,
+  "models": {}
+}

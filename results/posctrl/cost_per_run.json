@@ -1,0 +1,20 @@
+{
+  "generated": "2026-10-04T10:26:22",
+  "prices_as_of": "2026-10-03",
+  "logs": [
+    "logs\\posctrl"
+  ],
+  "note": "Mean over completed runs, agent + grader. Usage from retried calls may be missing from logs; cross-check provider dashboards.",
+  "by_model": {
+    "gemini": {
+      "models": [
+        "openrouter/google/gemini-2.5-pro"
+      ],
+      "runs": 48,
+      "mean_usd_agent": 0.045143200520833336,
+      "mean_usd_grader": 0.012880921875,
+      "mean_usd_total": 0.05802412239583334,
+      "total_usd_all_samples": 2.7851578750000003
+    }
+  }
+}

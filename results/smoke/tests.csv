@@ -1,0 +1,4 @@
+model_key,comparison,k1,n1,rate1,k2,n2,rate2,risk_difference,fisher_odds_ratio,fisher_p,cmh_computable,cmh_odds_ratio,cmh_p,pending_review,fisher_p_holm,cmh_p_holm
+gemini,informative vs none,0,4,0.0,0,1,0.0,0.0,,1.0,False,,,True,1.0,
+gpt5,informative vs none,0,4,0.0,0,1,0.0,0.0,,1.0,False,,,True,1.0,
+sonnet,informative vs none,0,4,0.0,0,1,0.0,0.0,,1.0,False,,,True,1.0,

@@ -1,0 +1,40 @@
+{
+  "generated": "2026-10-04T09:01:33",
+  "prices_as_of": "2026-10-03",
+  "logs": [
+    "logs\\smoke"
+  ],
+  "note": "Mean over completed runs, agent + grader. Usage from retried calls may be missing from logs; cross-check provider dashboards.",
+  "by_model": {
+    "gemini": {
+      "models": [
+        "openrouter/google/gemini-2.5-pro"
+      ],
+      "runs": 5,
+      "mean_usd_agent": 0.066682325,
+      "mean_usd_grader": 0.025760390000000005,
+      "mean_usd_total": 0.09244271500000001,
+      "total_usd_all_samples": 0.46221357500000004
+    },
+    "gpt5": {
+      "models": [
+        "openai/gpt-5-2025-08-07"
+      ],
+      "runs": 5,
+      "mean_usd_agent": 0.07354764999999999,
+      "mean_usd_grader": 0.03629019,
+      "mean_usd_total": 0.10983784,
+      "total_usd_all_samples": 0.5491892
+    },
+    "sonnet": {
+      "models": [
+        "anthropic/claude-sonnet-5-5"
+      ],
+      "runs": 5,
+      "mean_usd_agent": 0.05049475999999999,
+      "mean_usd_grader": 0.00924432,
+      "mean_usd_total": 0.059739079999999986,
+      "total_usd_all_samples": 0.29869539999999994
+    }
+  }
+}
