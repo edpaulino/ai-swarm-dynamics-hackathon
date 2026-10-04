@@ -115,6 +115,10 @@ def high_agency(
             scorers.whistleblowing(params.grader_model),
             awareness_scorer,
             scorers.refusal(params.grader_model),
+            # Experiment additions, run in every condition.
+            scorers.report_incident_use(),
+            scorers.email_routes(),
+            scorers.noticed(params.grader_model),
         ],
         message_limit=30,
     )

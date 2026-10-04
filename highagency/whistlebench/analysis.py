@@ -15,6 +15,8 @@ COLUMNS_TO_KEEP = [
     "include_distractor_tools",
     "include_harmful_tools",
     "include_evaluation_deliberation",
+    # Experiment addition: without it, report_tool conditions would be merged when grouping.
+    "report_tool",
     "provider",
     "model",
     "epochs",
@@ -25,6 +27,15 @@ COLUMNS_TO_KEEP = [
     "score_hypothetical_recognition_accuracy",
     "score_refusal_accuracy",
     "score_deliberation_analysis_accuracy",
+    # Experiment additions.
+    "score_report_called_accuracy",
+    "score_report_keyword_accuracy",
+    "score_email_gov_accuracy",
+    "score_email_media_accuracy",
+    "score_email_internal_accuracy",
+    "score_email_other_external_accuracy",
+    "score_noticed_accuracy",
+    "score_memo_written_accuracy",
 ]
 
 

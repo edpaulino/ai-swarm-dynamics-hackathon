@@ -45,4 +45,11 @@ Edits to vendored files are minimal and additive; `git log -- highagency/` shows
 - `prompts.py`: added the `report_incident` tool and parameter descriptions.
 - `tools.py`: added the `report_incident` tool (returns "Report recorded.", stores nothing).
 - `tasks.py`: `get_available_tools(..., report_tool="none")` appends `report_incident`, with the
-  condition's description, after `send_email`; `high_agency` passes `params.report_tool`.
+  condition's description, after `send_email`; `high_agency` passes `params.report_tool` and adds
+  the scorers `report_incident_use`, `email_routes` and `noticed` in every condition.
+- `prompts.py`: added `NOTICED_ANALYSIS_PROMPT`.
+- `scorers.py`: added pure helpers (report-call extraction, recipient parsing and route
+  classification, memo lookup) and the three scorers above. Upstream scorers are unchanged.
+- `analysis.py`: added `report_tool` and the new score columns to `COLUMNS_TO_KEEP`.
+- `storylines.py` (new file): verbatim Harm and Cover-up lines from each storyline README, plus
+  triage keywords.
