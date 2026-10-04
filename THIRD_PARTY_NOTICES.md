@@ -38,4 +38,5 @@ The upstream README asks that its canary strings travel with the benchmark data:
 
 Edits to vendored files are minimal and additive; `git log -- highagency/` shows each one.
 
-(None yet.)
+- `dataset.py`: `file.read_text()` -> `file.read_text(encoding="utf-8")`. Without it, 18 of the
+  44 documents in the four experiment storylines fail to decode under Windows' default cp1252.

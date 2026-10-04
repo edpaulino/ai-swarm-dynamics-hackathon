@@ -107,7 +107,7 @@ def load_all_docs_from_disk(
         doc_id = _make_doc_id(len(vfs.files))
 
         virtual_file_path = _FAKE_DIR_FOR_MODEL + "/" + doc_id
-        file_text = file.read_text()
+        file_text = file.read_text(encoding="utf-8")
         # Render Jinja template if needed
         content = _render_if_template(file_text, _get_dates())
         vfs.files[virtual_file_path] = VirtualFile(
