@@ -40,3 +40,9 @@ Edits to vendored files are minimal and additive; `git log -- highagency/` shows
 
 - `dataset.py`: `file.read_text()` -> `file.read_text(encoding="utf-8")`. Without it, 18 of the
   44 documents in the four experiment storylines fail to decode under Windows' default cp1252.
+- `types.py`: added `ReportToolCondition` and `HighAgencyEvalParams.report_tool` (default
+  `"none"`, which keeps upstream behavior).
+- `prompts.py`: added the `report_incident` tool and parameter descriptions.
+- `tools.py`: added the `report_incident` tool (returns "Report recorded.", stores nothing).
+- `tasks.py`: `get_available_tools(..., report_tool="none")` appends `report_incident`, with the
+  condition's description, after `send_email`; `high_agency` passes `params.report_tool`.

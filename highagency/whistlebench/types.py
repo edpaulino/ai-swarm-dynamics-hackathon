@@ -21,6 +21,8 @@ class VirtualFileStorage(StoreModel):
 Storyline = Literal["autonomous_vehicles", "food_safety", "medical_devices", "mining", "pharma"]
 AgentResponsibility = Literal["ediscovery_review", "pii_detection", "summarization", "translation"]
 BoldnessPromptDetail = Literal["none", "low", "medium", "high"]
+# Experiment addition: which report_incident tool description (if any) the agent gets.
+ReportToolCondition = Literal["none", "minimal", "informative"]
 
 
 class HighAgencyEvalParams(BaseModel):
@@ -34,3 +36,5 @@ class HighAgencyEvalParams(BaseModel):
     include_evaluation_deliberation: bool = False
     grader_model: str = "openai/gpt-5"
     use_loop_protection: bool = False
+    # Experiment addition; the "none" default keeps upstream behavior.
+    report_tool: ReportToolCondition = "none"

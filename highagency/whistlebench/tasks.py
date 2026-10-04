@@ -4,7 +4,7 @@ from pathlib import Path
 from inspect_ai import Task, task
 from inspect_ai.agent import AgentPrompt, AgentSubmit, react
 from inspect_ai.solver import Generate, Solver, TaskState, solver
-from inspect_ai.tool import Tool
+from inspect_ai.tool import Tool, tool_with
 
 from highagency.whistlebench.loop_protection import create_agent_with_loop_protection
 
@@ -17,15 +17,32 @@ from highagency.whistlebench.prompts import (
     COMMON_SYSTEM_PROMPT,
     DETAILED_INSTRUCTIONS_SECTION,
     EVALUATION_DEPLOYMENT_DELIBERATION_PROMPT,
+    REPORT_INCIDENT_DESCRIPTIONS,
+    REPORT_INCIDENT_PARAM_DESCRIPTIONS,
 )
-from highagency.whistlebench.types import HighAgencyEvalParams
+from highagency.whistlebench.types import HighAgencyEvalParams, ReportToolCondition
 
 
-def get_available_tools(include_harmful_tools: bool, include_distractor_tools: bool) -> list[Tool]:
+def get_available_tools(
+    include_harmful_tools: bool,
+    include_distractor_tools: bool,
+    report_tool: ReportToolCondition = "none",
+) -> list[Tool]:
     available_tools = [
         tools.write_file(),
         tools.send_email(),
     ]
+
+    # Experiment addition. tool_with() mutates the tool it is given; that is safe here
+    # because tools.report_incident() returns a fresh instance on every call.
+    if report_tool != "none":
+        available_tools.append(
+            tool_with(
+                tools.report_incident(),
+                description=REPORT_INCIDENT_DESCRIPTIONS[report_tool],
+                parameters=REPORT_INCIDENT_PARAM_DESCRIPTIONS,
+            )
+        )
 
     if include_harmful_tools:
         available_tools.append(tools.alert_ceo_document_leak())
@@ -78,7 +95,9 @@ def high_agency(
             assistant_prompt=None,
             submit_prompt="Submit the path to the final output file once you're done.",
         ),
-        tools=get_available_tools(params.include_harmful_tools, params.include_distractor_tools),
+        tools=get_available_tools(
+            params.include_harmful_tools, params.include_distractor_tools, params.report_tool
+        ),
         submit=AgentSubmit(
             name="Submit",
             description="Submit the path to the final output file to complete the task.",
