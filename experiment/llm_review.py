@@ -671,7 +671,8 @@ def write_answers(
     return counts
 
 
-def cmd_apply(review_dir: Path, batch: str) -> int:
+def cmd_apply(review_dir: Path, batch: str, no_fallback: bool = False) -> int:
+    """no_fallback (Amendment 3, Stage 2): on FAIL, write the labels anyway and flag it."""
     sample_path, scope_path, result_path = batch_paths(review_dir, batch)
     for path in (sample_path, scope_path):
         if not path.exists():
@@ -715,7 +716,8 @@ def cmd_apply(review_dir: Path, batch: str) -> int:
         if author[i][0] == "1" and labels[i]["judge_confirmed_report"] == "1" and author[i][1]
     ]
     conceal_agree = sum(author[i][1] == labels[i]["judge_mentions_concealment"] for i in both)
-    if passed:
+    write = passed or no_fallback
+    if write:
         missing = missing_concealment(author, labels)
         if missing:
             raise ReviewError(
@@ -732,7 +734,7 @@ def cmd_apply(review_dir: Path, batch: str) -> int:
     usd_scope = float(usd.reindex(sorted(scope_ids)).sum())
     usd_all = float(usd.sum())
 
-    counts = write_answers(review_dir, scope_ids, author, labels) if passed else None
+    counts = write_answers(review_dir, scope_ids, author, labels) if write else None
 
     verdict = "PASS" if passed else "FAIL"
     pool_pos = int((pool["judge_confirmed_report"] == "1").sum())
@@ -763,6 +765,12 @@ def cmd_apply(review_dir: Path, batch: str) -> int:
         f"- Judge cost: ${usd_scope:.2f} for this batch's rows; ${usd_all:.2f} for all rows in "
         f"{LABELS_FILE}.",
     ]
+    if counts is not None and not passed:
+        lines.append(
+            "- **Spot-check failed. Under Amendment 3 (no fallback) the judge's labels are used "
+            "anyway**, with the author's labels on the sampled rows. Disagreements are listed "
+            "below."
+        )
     if counts is not None:
         lines.append(
             f"- Written to {analyze.REVIEW_FILE}: {counts['judge']} judge labels (`{JUDGE_NOTE}`), "
@@ -781,6 +789,7 @@ def cmd_apply(review_dir: Path, batch: str) -> int:
         "| author \\ judge | 1 | 0 | total |",
         "|---|---|---|---|",
     ]
+    disagreements = [i for i in sampled if author[i][0] != labels[i]["judge_confirmed_report"]]
     for a in ("1", "0"):
         row_total = confusion[(a, "1")] + confusion[(a, "0")]
         lines.append(f"| {a} | {confusion[(a, '1')]} | {confusion[(a, '0')]} | {row_total} |")
@@ -788,6 +797,12 @@ def cmd_apply(review_dir: Path, batch: str) -> int:
         f"| total | {confusion[('1', '1')] + confusion[('0', '1')]} | "
         f"{confusion[('1', '0')] + confusion[('0', '0')]} | {n} |"
     )
+    if disagreements:
+        lines += ["", "## Rows where the author and the judge disagree", ""]
+        lines += [
+            f"- {i}: author {author[i][0]}, judge {labels[i]['judge_confirmed_report']}"
+            for i in disagreements
+        ]
     result_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     print(
@@ -795,6 +810,8 @@ def cmd_apply(review_dir: Path, batch: str) -> int:
         f"kappa {_fmt_kappa(kappa)}; needed {needed_for_pass(n)}. Result: {result_path}"
     )
     if counts is not None:
+        if not passed:
+            print("FAIL, but --no-fallback (Amendment 3): labels written anyway.")
         print(
             f"Wrote {counts['judge']} judge + {counts['author']} author answers to "
             f"{review_dir / analyze.REVIEW_FILE} ({counts['already_answered']} already answered)."
@@ -821,6 +838,11 @@ def main(argv: list[str] | None = None) -> int:
     judge.add_argument("--i-approve-spend", action="store_true", help="allow paid API calls")
     for sp in (sample, apply):
         sp.add_argument("--batch", required=True, help="e.g. stage1, stage2")
+    apply.add_argument(
+        "--no-fallback",
+        action="store_true",
+        help="Amendment 3 (Stage 2): on FAIL, write the labels anyway instead of a full review",
+    )
     sample.add_argument("--n", type=int, default=SAMPLE_N)
     sample.add_argument("--seed", type=int, default=SAMPLE_SEED)
     args = p.parse_args(argv)
@@ -829,7 +851,7 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_judge(args.review_dir, args.i_approve_spend)
         if args.command == "sample":
             return cmd_sample(args.review_dir, args.batch, args.n, args.seed)
-        return cmd_apply(args.review_dir, args.batch)
+        return cmd_apply(args.review_dir, args.batch, args.no_fallback)
     except (ReviewError, ValueError) as ex:
         print(f"Error: {ex}")
         return 2

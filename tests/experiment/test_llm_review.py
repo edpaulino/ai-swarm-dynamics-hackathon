@@ -762,3 +762,22 @@ def test_full_pipeline_with_mock_judge(tmp_path: Path):
     reviewed = analyze.merge_review([_cand(i, m) for i, m in enumerate(markers)], tmp_path)
     assert not reviewed["confirmed_report"].isna().any()
     assert int(reviewed["confirmed_report"].sum()) == 9  # 8 judged 1 + the author's must_review
+
+
+def test_no_fallback_writes_labels_on_fail(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+    """Amendment 3: with --no-fallback, a FAIL still writes judge labels (author's on sampled
+    rows) and lists the disagreements."""
+    _stage1(tmp_path)
+    spot = _fill_spot(tmp_path, "stage1", disagreements=2)
+    assert (
+        lr.main(["apply", "--review-dir", str(tmp_path), "--batch", "stage1", "--no-fallback"]) == 0
+    )
+    out = capsys.readouterr().out
+    assert "FAIL" in out and "labels written anyway" in out
+    result = (tmp_path / "spotcheck_stage1_result.md").read_text(encoding="utf-8")
+    assert "FAIL" in result and "Amendment 3" in result
+    assert "## Rows where the author and the judge disagree" in result
+    by_id = _read(tmp_path / analyze.REVIEW_FILE).set_index("review_id")
+    assert (by_id["confirmed_report"] != "").all()
+    for rid, row in spot.set_index("review_id").iterrows():
+        assert by_id.loc[rid, "confirmed_report"] == row["confirmed_report"]
