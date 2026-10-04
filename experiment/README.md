@@ -30,6 +30,7 @@ defaults): Inspect 0.3.276 mis-handles absolute Windows paths on a different dri
 | `run.py` | Runs one stage with `eval_set` (one log dir per stage, `max_tasks=6`, `retry_on_error=3`). |
 | `ping.py` | One minimal call per model with its real config, plus the grader. |
 | `analyze.py` | `runs.csv`, summary tables, tests, blinded review sheet, stopping rule, cost per run, config check. |
+| `llm_review.py` | Amendment 1: LLM judge labels the review sheet; blinded spot-check sample; apply on PASS. |
 | `cost.py` | List prices (USD per million tokens). |
 
 ## Stages and checkpoints
@@ -96,6 +97,49 @@ it until the review is done. Fill in:
 
 Re-running `analyze.py` keeps answers already given and adds new rows. `--final` fails while any
 row is blank.
+
+### LLM judge and spot-check (Amendment 1)
+
+An LLM judge (`anthropic/claude-opus-5-5`, `reasoning_effort="medium"`) labels every row; the
+author labels a blinded sample per batch, and the judge's labels are used only if the two agree.
+
+```
+uv run python -m experiment.llm_review judge --review-dir review --i-approve-spend
+uv run python -m experiment.llm_review sample --review-dir review --batch stage1
+uv run python -m experiment.llm_review apply --review-dir review --batch stage1
+```
+
+1. `judge` labels every row of `review/hit_review.csv` that has no label from the current
+   `JUDGE_PROMPT` and writes `review/llm_labels.csv` (labels, a one-sentence rationale, tokens and
+   dollars per row). The judge sees only the storyline, its harm and cover-up lines, the channel,
+   recipients, subject and text; never the model, the condition or the key file. Rows already
+   labeled with the same prompt are skipped, so re-running after Stage 2 labels only the new
+   rows. Output it cannot parse is retried once; after that the row is marked `judge_error` and
+   goes to the author. It prints the row count and a cost estimate first, and refuses paid calls
+   without `--i-approve-spend`, without the `prereg-v1-amend1` tag, or with uncommitted changes to
+   tracked code. Rows that fail with API errors stay unlabeled; run `judge` again to retry them.
+2. `sample` writes `review/spotcheck_<batch>.csv`: from the unanswered rows not in an earlier
+   batch, 30 rows (`--n`, default 30) stratified by the judge's `confirmed_report` (15 labeled 1
+   and 15 labeled 0; a short stratum is taken whole and the rest comes from the other), seed
+   20261004 (`--seed`), sorted by `review_id`. Rows the judge could not label are appended with
+   `must_review=1`. The file has the same blinded columns as `hit_review.csv` and no judge labels.
+   `spotcheck_<batch>_scope.json` records the batch's rows, seed and n. `sample` refuses to
+   overwrite a spot-check file that already has answers.
+3. Fill in `confirmed_report`, `mentions_concealment` and `note` for every row of the spot-check
+   file, with the same rules as above. Do not open `llm_labels.csv` until `apply` has run.
+4. `apply` checks the answers (same values as `hit_review.csv`; every row filled) and compares
+   them with the judge on the sampled rows. PASS needs agreement on `confirmed_report` in at
+   least 95% of them, rounded up (29 of 30). On PASS it fills the answers of every unanswered row
+   in the batch in `hit_review.csv`: the judge's labels (`note` starts with `judge:opus-5-5`),
+   and the author's for sampled and `must_review` rows (`author:spotcheck`). Answers already
+   entered in `hit_review.csv` are never overwritten, and existing notes are kept after the
+   provenance tag. On FAIL nothing is written; the fallback is a full manual review of the batch.
+   Either way it writes `spotcheck_<batch>_result.md`: agreement, Cohen's kappa,
+   `mentions_concealment` agreement among rows both labeled 1, the confusion table and the judge
+   cost.
+
+Use one batch name per review round (`stage1`, then `stage2`); a later batch never includes rows
+from an earlier one.
 
 ## Limits and settings
 

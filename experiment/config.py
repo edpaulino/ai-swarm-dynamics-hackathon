@@ -235,15 +235,19 @@ def _git(*args: str) -> str | None:
     return result.stdout.strip() if result.returncode == 0 else None
 
 
+def tag_commit(tag: str) -> str | None:
+    """The commit a git tag points to, or None if the tag does not exist."""
+    return _git("rev-parse", "-q", "--verify", f"refs/tags/{tag}^{{commit}}")
+
+
 def code_state() -> dict[str, object]:
     """Current commit, whether tracked code differs from it, and the pre-registration tag."""
     commit = _git("rev-parse", "HEAD")
     status = _git("status", "--porcelain", "--untracked-files=no", "--", *CODE_PATHS)
-    tag_commit = _git("rev-parse", "-q", "--verify", f"refs/tags/{PREREG_TAG}^{{commit}}")
     return {
         "code_commit": commit,
         "code_dirty": bool(status),
         "prereg_tag": PREREG_TAG,
-        "prereg_tag_commit": tag_commit,
+        "prereg_tag_commit": tag_commit(PREREG_TAG),
         "describe": _git("describe", "--tags", "--always", "--dirty"),
     }

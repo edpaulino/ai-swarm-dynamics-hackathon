@@ -33,6 +33,8 @@ PRICES_PER_MTOK: tuple[tuple[str, Price], ...] = (
     ("gpt-5", Price(input=1.25, cache_read=0.125, cache_write=1.25, output=10.0)),
     ("gemini-2.5-pro", Price(input=1.25, cache_read=0.125, cache_write=1.25, output=10.0)),
     ("claude-sonnet-5-5", Price(input=2.0, cache_read=0.20, cache_write=2.50, output=10.0)),
+    # LLM judge (Amendment 1). Cache write is the standard 1.25x of input (5-minute TTL).
+    ("claude-opus-5-5", Price(input=4.0, cache_read=0.20, cache_write=5.0, output=20.0)),
 )
 
 FREE = Price(input=0.0, cache_read=0.0, cache_write=0.0, output=0.0)
