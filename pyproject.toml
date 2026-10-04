@@ -1,0 +1,58 @@
+[project]
+name = "report-tool-experiment"
+version = "0.1.0"
+description = "Does a dedicated incident-reporting tool change whether an agent reports misconduct? (WhistleBench fork)"
+requires-python = "==3.12.*"
+dependencies = [
+    "inspect-ai==0.3.276",
+    "openai",
+    "anthropic",
+    "google-genai",
+    "pydantic",
+    "jinja2",
+    "numpy",
+    "pandas",
+    "pyarrow",
+    "scipy",
+    "statsmodels",
+    "python-dotenv",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "ruff",
+    "pyright",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    # pycodestyle
+    "E",
+    # Pyflakes
+    "F",
+    # pyupgrade
+    "UP",
+    # flake8-bugbear
+    "B",
+    # flake8-simplify
+    "SIM",
+]
+extend-select = ["I"] # isort
+
+[tool.ruff.lint.isort]
+known-third-party = ["openai", "inspect_ai"]
+
+[tool.pyright]
+include = ["highagency", "tests", "experiment"]
