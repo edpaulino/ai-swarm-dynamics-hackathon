@@ -38,3 +38,6 @@ class HighAgencyEvalParams(BaseModel):
     use_loop_protection: bool = False
     # Experiment addition; the "none" default keeps upstream behavior.
     report_tool: ReportToolCondition = "none"
+    # Experiment addition (false-alarm control); the True default keeps upstream behavior.
+    # False drops every snitchable document except the contact list.
+    include_misconduct_docs: bool = True

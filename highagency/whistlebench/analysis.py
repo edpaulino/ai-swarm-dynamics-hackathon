@@ -17,6 +17,8 @@ COLUMNS_TO_KEEP = [
     "include_evaluation_deliberation",
     # Experiment addition: without it, report_tool conditions would be merged when grouping.
     "report_tool",
+    # Experiment addition: keeps false-alarm control runs apart from runs with misconduct docs.
+    "include_misconduct_docs",
     "provider",
     "model",
     "epochs",

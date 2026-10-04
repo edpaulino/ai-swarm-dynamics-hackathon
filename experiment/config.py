@@ -39,9 +39,19 @@ COMPARISONS: tuple[tuple[str, str], ...] = (
 )
 
 GeminiVia = Literal["google", "openrouter"]
-Stage = Literal["dryrun", "smoke", "stage1", "posctrl", "stage2"]
-STAGES: tuple[str, ...] = ("dryrun", "smoke", "stage1", "posctrl", "stage2")
-PAID_STAGES: tuple[str, ...] = ("smoke", "stage1", "posctrl", "stage2")
+Stage = Literal["dryrun", "smoke", "stage1", "posctrl", "stage2", "falsealarm", "falsealarm2"]
+STAGES: tuple[str, ...] = (
+    "dryrun",
+    "smoke",
+    "stage1",
+    "posctrl",
+    "stage2",
+    "falsealarm",
+    "falsealarm2",
+)
+PAID_STAGES: tuple[str, ...] = tuple(s for s in STAGES if s != "dryrun")
+# The false-alarm top-up runs only for models named explicitly (--models).
+STAGES_NEEDING_MODELS: tuple[str, ...] = ("falsealarm2",)
 
 GEMINI_NAMES: dict[str, str] = {
     "google": "google/gemini-2.5-pro",
@@ -134,9 +144,11 @@ def experiment_params(
     storyline: str,
     boldness: BoldnessPromptDetail = "none",
     grader_model: str = GRADER_MODEL,
+    include_misconduct_docs: bool = True,
 ) -> HighAgencyEvalParams:
     """Summarization task, bare environment (routine documents on, no extra tools, no workflow
-    instructions), no boldness nudge unless stated (the positive control uses "medium")."""
+    instructions), no boldness nudge unless stated (the positive control uses "medium").
+    include_misconduct_docs=False is the false-alarm control (contact list + routine docs)."""
     return HighAgencyEvalParams(
         storyline=storyline,  # type: ignore[arg-type]
         agent_responsibility="summarization",
@@ -149,10 +161,19 @@ def experiment_params(
         grader_model=grader_model,
         use_loop_protection=False,
         report_tool=report_tool,
+        include_misconduct_docs=include_misconduct_docs,
     )
 
 
-STAGE_EPOCHS: dict[str, int] = {"dryrun": 1, "smoke": 1, "stage1": 12, "posctrl": 12, "stage2": 24}
+STAGE_EPOCHS: dict[str, int] = {
+    "dryrun": 1,
+    "smoke": 1,
+    "stage1": 12,
+    "posctrl": 12,
+    "stage2": 24,
+    "falsealarm": 6,
+    "falsealarm2": 6,
+}
 
 
 @dataclass(frozen=True)
@@ -187,16 +208,28 @@ def stage_plan(
     stage1: 3 conditions x 4 storylines x 12 epochs per model; 432 runs.
     posctrl: Gemini, "medium" nudge, No tool, 4 storylines x 12 epochs; 48 runs.
     stage2: 3 conditions x 4 storylines x 24 epochs per continuing model; 288 runs each.
+    falsealarm: Informative, no nudge, no misconduct documents, 4 storylines x 6 epochs per
+        model; 24 runs each, 72 in all.
+    falsealarm2: the same tasks for another 6 epochs, only for models named in model_keys
+        (required); 24 runs each.
     """
     if stage not in STAGES:
         raise ValueError(f"unknown stage {stage!r}")
     if epochs is not None and stage != "dryrun":
         raise ValueError("epochs are pre-registered; only dryrun accepts an override")
+    if stage in STAGES_NEEDING_MODELS and not model_keys:
+        raise ValueError(f"stage {stage!r} runs only for models named with --models")
     grader = DRYRUN_GRADER_MODEL if stage == "dryrun" else GRADER_MODEL
 
     if stage == "posctrl":
         default_keys: tuple[str, ...] = ("gemini",)
         params = tuple(experiment_params("none", s, "medium", grader) for s in STORYLINES)
+    elif stage in ("falsealarm", "falsealarm2"):
+        default_keys = MODEL_KEYS
+        params = tuple(
+            experiment_params("informative", s, "none", grader, include_misconduct_docs=False)
+            for s in STORYLINES
+        )
     elif stage == "smoke":
         default_keys = MODEL_KEYS
         params = tuple(experiment_params("informative", s, "none", grader) for s in STORYLINES) + (

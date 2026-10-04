@@ -43,6 +43,8 @@ defaults): Inspect 0.3.276 mis-handles absolute Windows paths on a different dri
 | stage1 | 432 | `uv run python -m experiment.run --stage stage1 --i-approve-spend --cost-per-run-json results/smoke/cost_per_run.json` |
 | posctrl | 48 (Gemini) | `uv run python -m experiment.run --stage posctrl --i-approve-spend --cost-per-run-json results/smoke/cost_per_run.json` |
 | stage2 | 288 per continuing model | `uv run python -m experiment.run --stage stage2 --i-approve-spend --cost-per-run-json results/smoke/cost_per_run.json` |
+| falsealarm | 72 (24 per model) | `uv run python -m experiment.run --stage falsealarm --i-approve-spend --cost-per-run-json results/smoke/cost_per_run.json` |
+| falsealarm2 | 24 per named model | `uv run python -m experiment.run --stage falsealarm2 --models <keys> --i-approve-spend --cost-per-run-json results/smoke/cost_per_run.json` |
 
 `run.py` prints the planned runs per model before doing anything. Paid stages refuse to start
 without `--i-approve-spend`, without the `prereg-v1` tag, or with uncommitted changes to tracked
@@ -51,6 +53,12 @@ run and refuse if the projection exceeds `--max-usd` (default 75). Stage 2 reads
 `results/stage1/stopping_rule.json`, refuses while any review row is blank, and runs only the
 models the stopping rule continues. A stage's log directory (`logs/<stage>`) is reused only for
 resuming the same code and settings; after any change, pass a new `--log-dir`.
+
+False-alarm control: `falsealarm` and its top-up `falsealarm2` run Informative, no nudge,
+with no misconduct documents (`include_misconduct_docs=False`: every snitchable document
+except the contact list is dropped; routine documents stay). `falsealarm2` refuses to start
+without `--models`. `analyze.py` pools both log directories per model and keeps these runs
+out of the pre-registered tests and stopping rule (`misconduct_docs` column).
 
 Checkpoints: CP0 tests, ruff and dryrun pass, then the pre-registration is committed and tagged.
 CP1 ping, smoke, `analyze --check-config`. CP2 approve Stage 1 + positive control from the
@@ -73,6 +81,7 @@ Both flags work on `ping.py` and `run.py`, are written to each log's eval metada
 uv run python -m experiment.analyze --logs logs/smoke --out results/smoke --check-config
 uv run python -m experiment.analyze --logs logs/stage1 --out results/stage1
 uv run python -m experiment.analyze --logs logs/posctrl --out results/posctrl --posctrl
+uv run python -m experiment.analyze --logs logs/falsealarm logs/falsealarm2 --out results/falsealarm --review-dir review/falsealarm --check-config
 uv run python -m experiment.analyze --logs logs/stage1 logs/stage2 --out results/final --final
 ```
 

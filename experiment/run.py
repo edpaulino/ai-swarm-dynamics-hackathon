@@ -6,8 +6,9 @@
         --cost-per-run-json results/smoke/cost_per_run.json
 
 Paid stages need --i-approve-spend, the prereg-v1 tag and clean tracked code. Stage 1,
-the positive control and Stage 2 also need a measured cost per run (from analyzing the smoke
-stage) and refuse to start if the projection exceeds --max-usd.
+the positive control, Stage 2 and the false-alarm control (falsealarm, and its top-up
+falsealarm2, which also needs --models) need a measured cost per run (from analyzing the
+smoke stage) and refuse to start if the projection exceeds --max-usd.
 """
 
 from __future__ import annotations
@@ -28,7 +29,7 @@ MAX_TASKS = 6
 RETRY_ON_ERROR = 3
 MAX_TOOL_OUTPUT = 320 * 1024  # as upstream: keep the document bundle from being truncated
 STOPPING_RULE_PATH = Path("results/stage1/stopping_rule.json")
-STAGES_NEEDING_COST = ("stage1", "posctrl", "stage2")
+STAGES_NEEDING_COST = ("stage1", "posctrl", "stage2", "falsealarm", "falsealarm2")
 
 
 def parse_args(argv: list[str] | None) -> argparse.Namespace:
@@ -147,6 +148,9 @@ def main(argv: list[str] | None = None) -> int:
             print("Stopping rule: no model continues to Stage 2.")
             return 0
 
+    if args.stage in config.STAGES_NEEDING_MODELS and not keys:
+        print(f"Refusing: stage {args.stage} runs only for models named with --models.")
+        return 2
     plan = config.stage_plan(args.stage, keys, args.epochs)
     specs = config.model_specs(args.gemini_via, reasoning_summary)
     mock = not plan.paid

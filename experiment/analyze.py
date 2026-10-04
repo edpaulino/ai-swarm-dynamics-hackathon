@@ -19,6 +19,7 @@ import argparse
 import hashlib
 import json
 import math
+import re
 import sys
 from collections.abc import Iterable, Sequence
 from datetime import datetime
@@ -38,8 +39,14 @@ from statsmodels.stats.proportion import proportion_confint
 
 from experiment import config, cost
 from highagency.whistlebench import scorers
+from highagency.whistlebench.dataset import (
+    contact_list_path,
+    load_all_docs_from_disk,
+    misconduct_doc_paths,
+)
 from highagency.whistlebench.prompts import REPORT_INCIDENT_DESCRIPTIONS
 from highagency.whistlebench.storylines import STORYLINES, keyword_hits
+from highagency.whistlebench.types import VirtualFileStorage
 
 REVIEW_FILE = "hit_review.csv"
 KEY_FILE = "hit_review_key.csv"
@@ -299,6 +306,8 @@ def load_logs(
                     "condition": params.get("report_tool", "none"),
                     "storyline": params.get("storyline", ""),
                     "boldness": params.get("boldness_prompt_detail", ""),
+                    # False only in the false-alarm control (no misconduct documents).
+                    "misconduct_docs": bool(params.get("include_misconduct_docs", True)),
                     "sample_id": sample.id,
                     "epoch": sample.epoch,
                     "error": sample.error.message[:300] if sample.error else "",
@@ -521,11 +530,19 @@ def summarize(runs: pd.DataFrame, keys: list[str]) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def _design_runs(runs: pd.DataFrame) -> pd.DataFrame:
+    """Completed runs of the main design: no nudge, misconduct documents present (a missing
+    misconduct_docs column means all runs have them)."""
+    docs = runs["misconduct_docs"].astype(bool) if "misconduct_docs" in runs else True
+    return runs[(runs["error"] == "") & (runs["boldness"] == "none") & docs]
+
+
 def tests_table(runs: pd.DataFrame) -> pd.DataFrame:
     """Per model: Minimal vs No tool, Informative vs No tool, Informative vs Minimal.
     Fisher exact (pooled) is the primary test; CMH by storyline is the stratified check.
-    Holm is applied across all tests in the table (9 for 3 models), separately for each."""
-    ok = runs[(runs["error"] == "") & (runs["boldness"] == "none")]
+    Holm is applied across all tests in the table (9 for 3 models), separately for each.
+    False-alarm control runs (no misconduct documents) are left out."""
+    ok = _design_runs(runs)
     rows = []
     for model_key in sorted(ok["model_key"].unique()):
         m = ok[ok["model_key"] == model_key]
@@ -576,7 +593,7 @@ def tests_table(runs: pd.DataFrame) -> pd.DataFrame:
 
 
 def stopping_rule(runs: pd.DataFrame, log_dirs: list[str]) -> dict[str, Any]:
-    ok = runs[(runs["error"] == "") & (runs["boldness"] == "none")]
+    ok = _design_runs(runs)
     tool = ok[ok["condition"].isin(["minimal", "informative"])]
     models: dict[str, Any] = {}
     for model_key in sorted(ok["model_key"].unique()):
@@ -652,6 +669,60 @@ def _tool_descriptions(obj: Any, name: str) -> list[str]:
     return found
 
 
+VFS_STORE_KEY = "VirtualFileStorage:files"
+_DOC_HEADING = re.compile(r"^## (DOC\d{4})$", re.MULTILINE)
+
+
+def _marker_line(path: Path) -> str:
+    """The longest non-template line of a document, used to find it in logged text."""
+    text = path.read_text(encoding="utf-8")
+    return max((ln.strip() for ln in text.splitlines() if "{" not in ln), key=len)
+
+
+def check_no_misconduct_docs(
+    sample: EvalSample, params: dict[str, Any]
+) -> list[tuple[str, bool, str]]:
+    """False-alarm control: the sample's documents are the routine documents plus the contact
+    list. Neither the input nor the store records file names, so this compares document ids
+    and types with a fresh load and looks for each excluded document's text."""
+    storyline = str(params.get("storyline", ""))
+    vfs = VirtualFileStorage()
+    load_all_docs_from_disk(
+        vfs,
+        storyline,  # type: ignore[arg-type]
+        bool(params.get("include_distractor_docs", True)),
+        include_misconduct_docs=False,
+    )
+    expected = {vf.doc_id: vf.doc_type for vf in vfs.files.values()}
+    if isinstance(sample.input, str):
+        text = sample.input
+    else:
+        text = "\n".join(m.text for m in sample.input)
+    headings = _DOC_HEADING.findall(text)
+    found = [m for m in map(_marker_line, misconduct_doc_paths(storyline)) if m in text]  # type: ignore[arg-type]
+    results = [
+        (
+            "input documents = routine docs + contact list",
+            headings == sorted(expected) and _marker_line(contact_list_path(storyline)) in text,  # type: ignore[arg-type]
+            f"expected {len(expected)} documents, found {len(headings)}",
+        ),
+        ("input has no misconduct document text", not found, "; ".join(found)[:300]),
+    ]
+    files = (sample.store or {}).get(VFS_STORE_KEY) or {}
+    loaded = {
+        f.get("doc_id"): f.get("doc_type")
+        for f in files.values()
+        if f.get("doc_type") != "model_generated"
+    }
+    name = "store documents = routine docs + contact list"
+    if not loaded:
+        results.append((name, True, "no documents in the store (no file tool call)"))
+    else:
+        n_snitchable = sum(t == "snitchable" for t in loaded.values())
+        results.append((name, loaded == expected, f"snitchable docs in store: {n_snitchable}"))
+    return results
+
+
 def check_log_config(log: EvalLog, params: dict[str, Any], meta: dict[str, Any]) -> list[dict]:
     """Check the first logged request of the agent model in one eval log."""
     model = log.eval.model
@@ -676,6 +747,13 @@ def check_log_config(log: EvalLog, params: dict[str, Any], meta: dict[str, Any])
         k for k in plan_config if k.startswith("reasoning") or k == "max_connections"
     )
     add("no eval-level reasoning/max_connections", not eval_level, ", ".join(eval_level))
+
+    if params.get("include_misconduct_docs", True) is False:
+        if log.samples:
+            for name, ok, detail in check_no_misconduct_docs(log.samples[0], params):
+                add(name, ok, detail)
+        else:
+            add("input documents = routine docs + contact list", False, "no samples")
 
     event = None
     for sample in log.samples or []:
@@ -772,6 +850,7 @@ MAIN_COLUMNS = [
     "model_key",
     "condition",
     "boldness",
+    "misconduct_docs",
     "n",
     "errors",
     "reports",
@@ -816,6 +895,17 @@ TEST_COLUMNS = [
 ]
 
 
+def _false_alarm_lines(runs: pd.DataFrame) -> list[str]:
+    no_docs = ~runs["misconduct_docs"]
+    if not no_docs.any():
+        return []
+    scope = "" if no_docs.all() else " (rows with misconduct_docs False)"
+    return [
+        "- False-alarm control: documents contain no misconduct; every candidate is a "
+        f"false-alarm candidate{scope}."
+    ]
+
+
 def write_summary(
     out: Path,
     runs: pd.DataFrame,
@@ -845,6 +935,7 @@ def write_summary(
         "- `code_email_*`, `tool_call_runs` and the original `*_whistleblowing` scores are "
         "code/grader classifications, not confirmed reports. The original whistleblowing "
         "scorer is valid only for No tool and the positive control.",
+        *_false_alarm_lines(runs),
         "",
         "Served model names: " + "; ".join(f"{k}: {v}" for k, v in served.items()),
         "",
@@ -869,6 +960,7 @@ def write_summary(
                 "model_key",
                 "condition",
                 "boldness",
+                "misconduct_docs",
                 "storyline",
                 "n",
                 "reports",
@@ -937,8 +1029,10 @@ def main(argv: list[str] | None = None) -> int:
 
     args.out.mkdir(parents=True, exist_ok=True)
     runs.to_csv(args.out / "runs.csv", index=False)
-    by_condition = summarize(runs, ["model_key", "condition", "boldness"])
-    by_storyline = summarize(runs, ["model_key", "condition", "boldness", "storyline"])
+    by_condition = summarize(runs, ["model_key", "condition", "boldness", "misconduct_docs"])
+    by_storyline = summarize(
+        runs, ["model_key", "condition", "boldness", "misconduct_docs", "storyline"]
+    )
     tests = tests_table(runs)
     by_condition.to_csv(args.out / "by_condition.csv", index=False)
     by_storyline.to_csv(args.out / "by_storyline.csv", index=False)
@@ -986,11 +1080,13 @@ def main(argv: list[str] | None = None) -> int:
                 "model_key",
                 "condition",
                 "boldness",
+                "misconduct_docs",
                 "n",
                 "errors",
                 "reports",
                 "pending_runs",
                 "tool_call_runs",
+                "candidate_runs",
                 "usd_per_run_total",
             ],
         )

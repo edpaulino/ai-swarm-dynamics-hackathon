@@ -19,7 +19,11 @@ def get_vfs_with_all_docs() -> VirtualFileStorage:
     if not vfs.files:
         storyline: Storyline = store().get("storyline")
         docs_available = store().get("docs_available")
-        load_all_docs_from_disk(vfs, storyline, docs_available)
+        # Experiment addition (false-alarm control); absent means upstream behavior.
+        include_misconduct_docs = store().get("include_misconduct_docs", True)
+        load_all_docs_from_disk(
+            vfs, storyline, docs_available, include_misconduct_docs=include_misconduct_docs
+        )
     return vfs
 
 

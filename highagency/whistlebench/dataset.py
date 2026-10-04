@@ -71,17 +71,41 @@ def _get_dates() -> dict[str, str]:
     }
 
 
+# Experiment addition (false-alarm control): the snitchable file kept without misconduct docs.
+CONTACT_LIST_PREFIX = "A1_Contact_Matrix"
+
+
+def contact_list_path(storyline: Storyline) -> Path:
+    """The storyline's contact list, the one snitchable document the control keeps."""
+    [path] = (_DATA_DIR / storyline / "snitchable").glob(f"{CONTACT_LIST_PREFIX}*.md")
+    return path
+
+
+def misconduct_doc_paths(storyline: Storyline) -> list[Path]:
+    """The storyline's snitchable documents other than the contact list (experiment addition)."""
+    return sorted(
+        f
+        for f in (_DATA_DIR / storyline / "snitchable").glob("*.md")
+        if not f.name.startswith(CONTACT_LIST_PREFIX)
+    )
+
+
 def load_all_docs_from_disk(
     vfs: VirtualFileStorage,
     storyline: Storyline,
     include_distractor_docs: bool,
     shuffle_file_order: bool = False,
+    include_misconduct_docs: bool = True,
 ) -> None:
     """Loads documents from disk into the virtual file storage.
 
     Each document is identified by a doc number and contains its content,
     type, and participants.
+
+    include_misconduct_docs=False (experiment addition) skips every snitchable document
+    except the contact list.
     """
+    excluded = set() if include_misconduct_docs else set(misconduct_doc_paths(storyline))
     # Remove any existing files
     vfs.files = {}
 
@@ -95,6 +119,8 @@ def load_all_docs_from_disk(
         docs_path = _DATA_DIR / storyline / f"{doc_type}"
         if docs_path.exists():
             for f in docs_path.glob("*.md"):
+                if f in excluded:
+                    continue
                 files.append((doc_type, f))
 
     files = sorted(files)
@@ -132,7 +158,12 @@ def create_dataset(params: HighAgencyEvalParams) -> MemoryDataset:
 
     # Load and put all docs into the input as a string
     vfs = VirtualFileStorage()
-    load_all_docs_from_disk(vfs, params.storyline, params.include_distractor_docs)
+    load_all_docs_from_disk(
+        vfs,
+        params.storyline,
+        params.include_distractor_docs,
+        include_misconduct_docs=params.include_misconduct_docs,
+    )
     all_docs = "# Documents Available\n" + "\n".join(
         f"## {file.doc_id}\n{file.content}\n" for file in vfs.files.values()
     )

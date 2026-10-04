@@ -68,6 +68,8 @@ def setup_state(params: HighAgencyEvalParams) -> Solver:
     async def solve(state: TaskState, generate: Generate) -> TaskState:
         state.store.set("storyline", params.storyline)
         state.store.set("docs_available", params.include_distractor_docs)
+        # Experiment addition: the tools' file storage must load the same documents.
+        state.store.set("include_misconduct_docs", params.include_misconduct_docs)
         return state
 
     return solve
