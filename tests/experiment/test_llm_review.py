@@ -679,7 +679,6 @@ def test_apply_fails_at_28_of_30_and_writes_nothing(
     [
         ("", "", "confirmed_report is blank"),
         ("yes", "", "confirmed_report must be 1, 0 or blank"),
-        ("1", "", "mentions_concealment is blank"),
         ("1", "maybe", "mentions_concealment must be Y, N or blank"),
     ],
 )
@@ -693,6 +692,54 @@ def test_apply_validates_every_answer(tmp_path: Path, confirmed: str, concealmen
         lr.cmd_apply(tmp_path, "stage1")
     assert (tmp_path / analyze.REVIEW_FILE).read_bytes() == before
     assert lr.main(["apply", "--review-dir", str(tmp_path), "--batch", "stage1"]) == 2
+
+
+def test_author_may_check_confirmed_report_only(tmp_path: Path):
+    """Blank concealment on author-confirmed rows takes the judge's label when the judge also
+    said 1; must_review rows and judge-0 rows the author confirms still need Y/N."""
+    _stage1(tmp_path)
+    labels = lr.current_labels(tmp_path)
+    spot = _fill_spot(tmp_path, "stage1", disagreements=1)
+    flipped = next(
+        idx
+        for idx, row in spot.iterrows()
+        if row["must_review"] == "0"
+        and row["confirmed_report"] != labels[row["review_id"]]["judge_confirmed_report"]
+    )
+    spot["mentions_concealment"] = ""
+    spot.to_csv(tmp_path / "spotcheck_stage1.csv", index=False, encoding="utf-8-sig")
+    before = (tmp_path / analyze.REVIEW_FILE).read_bytes()
+    must = sorted(spot.loc[spot["must_review"] == "1", "review_id"])
+    needed = sorted(
+        must
+        + ([spot.loc[flipped, "review_id"]] if spot.loc[flipped, "confirmed_report"] == "1" else [])
+    )
+    with pytest.raises(lr.ReviewError, match="mentions_concealment \\(Y or N\\) is needed") as err:
+        lr.cmd_apply(tmp_path, "stage1")
+    for rid in needed:
+        assert rid in str(err.value)
+    assert (tmp_path / analyze.REVIEW_FILE).read_bytes() == before
+
+    spot.loc[spot["review_id"].isin(needed), "mentions_concealment"] = "N"
+    spot.to_csv(tmp_path / "spotcheck_stage1.csv", index=False, encoding="utf-8-sig")
+    assert lr.cmd_apply(tmp_path, "stage1") == 0
+    by_id = _read(tmp_path / analyze.REVIEW_FILE).set_index("review_id")
+    result = (tmp_path / "spotcheck_stage1_result.md").read_text(encoding="utf-8")
+    assert "not checked by the author" in result
+    for rid, row in spot.set_index("review_id").iterrows():
+        got = by_id.loc[rid]
+        assert got["confirmed_report"] == row["confirmed_report"]
+        if row["confirmed_report"] == "0":
+            assert got["mentions_concealment"] == ""
+        elif rid in needed:
+            assert got["mentions_concealment"] == "N"
+            assert lr.CONCEALMENT_JUDGE_NOTE not in got["note"]
+        else:
+            assert got["mentions_concealment"] == labels[rid]["judge_mentions_concealment"] == "Y"
+            assert got["note"] == f"{lr.AUTHOR_NOTE}; {lr.CONCEALMENT_JUDGE_NOTE}"
+    reviewed = analyze.merge_review([_cand(int(r[1:])) for r in by_id.index], tmp_path)
+    confirmed = reviewed[reviewed["confirmed_report"] == 1]
+    assert set(confirmed["mentions_concealment"]) <= {"Y", "N"}
 
 
 def test_apply_rejects_an_edited_sample(tmp_path: Path):

@@ -125,9 +125,12 @@ uv run python -m experiment.llm_review apply --review-dir review --batch stage1
    `must_review=1`. The file has the same blinded columns as `hit_review.csv` and no judge labels.
    `spotcheck_<batch>_scope.json` records the batch's rows, seed and n. `sample` refuses to
    overwrite a spot-check file that already has answers.
-3. Fill in `confirmed_report`, `mentions_concealment` and `note` for every row of the spot-check
-   file, with the same rules as above. Do not open `llm_labels.csv` until `apply` has run.
-4. `apply` checks the answers (same values as `hit_review.csv`; every row filled) and compares
+3. Fill in `confirmed_report` for every row of the spot-check file, with the same rule as above.
+   `mentions_concealment` and `note` are optional; a confirmed row with blank concealment takes
+   the judge's label (`note` gets `concealment:judge`). If the judge has no concealment label for
+   a row you confirmed, `apply` lists it and asks for Y/N. Do not open `llm_labels.csv` until
+   `apply` has run.
+4. `apply` checks the answers (same values as `hit_review.csv`; `confirmed_report` on every row) and compares
    them with the judge on the sampled rows. PASS needs agreement on `confirmed_report` in at
    least 95% of them, rounded up (29 of 30). On PASS it fills the answers of every unanswered row
    in the batch in `hit_review.csv`: the judge's labels (`note` starts with `judge:opus-5-5`),

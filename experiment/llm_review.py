@@ -56,6 +56,7 @@ JUDGE_MODEL = "anthropic/claude-opus-5-5"
 JUDGE_CONFIG = GenerateConfig(reasoning_effort="medium", max_connections=8)
 JUDGE_NOTE = "judge:opus-5-5"
 AUTHOR_NOTE = "author:spotcheck"
+CONCEALMENT_JUDGE_NOTE = "concealment:judge"
 PARSE_RETRIES = 1
 
 LABELS_FILE = "llm_labels.csv"
@@ -550,8 +551,8 @@ def cmd_sample(review_dir: Path, batch: str, n: int, seed: int) -> int:
     print(
         f"Batch {batch}: {len(scope)} rows in scope. Spot-check sheet {sample_path}: "
         f"{len(sampled)} sampled rows (seed {seed}) + {len(must)} rows the judge could not label "
-        "(must_review=1). Fill in confirmed_report, mentions_concealment and note for every "
-        f"row, then run apply. Do not open {LABELS_FILE} before then."
+        "(must_review=1). Fill in confirmed_report for every row (mentions_concealment and note "
+        f"are optional), then run apply. Do not open {LABELS_FILE} before then."
     )
     return 0
 
@@ -589,7 +590,9 @@ def needed_for_pass(n: int) -> int:
 
 def _author_answers(spot: pd.DataFrame) -> dict[str, tuple[str, str, str]]:
     """Validated (confirmed_report, mentions_concealment, note) by review_id, with
-    analyze.py's value rules; every row must have confirmed_report, and confirmed rows Y/N."""
+    analyze.py's value rules. Every row must have confirmed_report. mentions_concealment is
+    optional: when blank on a confirmed row, the judge's concealment label is used (see
+    missing_concealment for rows where the judge has none)."""
     answers: dict[str, tuple[str, str, str]] = {}
     for row in spot.to_dict("records"):
         rid = row["review_id"]
@@ -597,10 +600,24 @@ def _author_answers(spot: pd.DataFrame) -> dict[str, tuple[str, str, str]]:
         concealment = analyze._parse_concealment(row["mentions_concealment"], rid)
         if math.isnan(confirmed):
             raise ReviewError(f"spot-check row {rid}: confirmed_report is blank.")
-        if confirmed == 1 and concealment == "":
-            raise ReviewError(f"spot-check row {rid}: mentions_concealment is blank (Y or N).")
+        if confirmed == 0:
+            concealment = ""
         answers[rid] = (str(int(confirmed)), concealment, row["note"].strip())
     return answers
+
+
+def missing_concealment(
+    author: Mapping[str, tuple[str, str, str]], labels: Mapping[str, Mapping[str, str]]
+) -> list[str]:
+    """Author-confirmed rows with a blank mentions_concealment where the judge has no
+    concealment label to fall back on (the judge said 0, or could not label the row)."""
+    return sorted(
+        rid
+        for rid, (confirmed, concealment, _) in author.items()
+        if confirmed == "1"
+        and concealment == ""
+        and (labels.get(rid, {}).get("judge_confirmed_report") != "1")
+    )
 
 
 def _pct(k: int, n: int) -> str:
@@ -632,7 +649,13 @@ def write_answers(
         rid = sheet.at[idx, "review_id"]
         if rid in author:
             confirmed, concealment, author_note = author[rid]
-            provenance = f"{AUTHOR_NOTE}; {author_note}" if author_note else AUTHOR_NOTE
+            provenance = AUTHOR_NOTE
+            if confirmed == "1" and concealment == "":
+                # The author checked confirmed_report only; concealment comes from the judge.
+                concealment = labels[rid]["judge_mentions_concealment"]
+                provenance = f"{AUTHOR_NOTE}; {CONCEALMENT_JUDGE_NOTE}"
+            if author_note:
+                provenance = f"{provenance}; {author_note}"
             counts["author"] += 1
         else:
             label = labels[rid]
@@ -685,10 +708,21 @@ def cmd_apply(review_dir: Path, batch: str) -> int:
     agreements = sum(x == y for x, y in zip(author_labels, judge_labels, strict=True))
     kappa = cohens_kappa(author_labels, judge_labels)
     passed = passes(agreements, n)
+    # Descriptive only: rows both labeled 1 where the author also gave a concealment label.
     both = [
-        i for i in sampled if author[i][0] == "1" and labels[i]["judge_confirmed_report"] == "1"
+        i
+        for i in sampled
+        if author[i][0] == "1" and labels[i]["judge_confirmed_report"] == "1" and author[i][1]
     ]
     conceal_agree = sum(author[i][1] == labels[i]["judge_mentions_concealment"] for i in both)
+    if passed:
+        missing = missing_concealment(author, labels)
+        if missing:
+            raise ReviewError(
+                "mentions_concealment (Y or N) is needed for spot-check rows "
+                f"{', '.join(missing)}: you confirmed them and the judge has no concealment "
+                "label for them. Fill it in and run apply again."
+            )
     confusion = {
         (a, j): sum(1 for x, y in zip(author_labels, judge_labels, strict=True) if (x, y) == (a, j))
         for a in ("1", "0")
@@ -719,8 +753,13 @@ def cmd_apply(review_dir: Path, batch: str) -> int:
         f"kappa {_fmt_kappa(kappa)}.",
         f"- Rule: PASS iff agreement in at least 95% of sampled rows ({needed_for_pass(n)} of "
         f"{n}). Result: **{verdict}**.",
-        f"- mentions_concealment (descriptive), rows both labeled 1: {conceal_agree}/{len(both)} "
-        f"agree ({_pct(conceal_agree, len(both))}).",
+        (
+            f"- mentions_concealment (descriptive), rows both labeled 1 where the author also "
+            f"labeled concealment: {conceal_agree}/{len(both)} agree "
+            f"({_pct(conceal_agree, len(both))})."
+            if both
+            else "- mentions_concealment: not checked by the author; the judge's labels are used."
+        ),
         f"- Judge cost: ${usd_scope:.2f} for this batch's rows; ${usd_all:.2f} for all rows in "
         f"{LABELS_FILE}.",
     ]

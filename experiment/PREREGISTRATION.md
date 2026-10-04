@@ -222,4 +222,48 @@ needs the author's explicit approval at its checkpoint.
 
 ## 10. Amendments
 
-None yet. Format: date, what changed, why, and what data had been seen.
+Format: date, what changed, why, and what data had been seen.
+
+### Amendment 1 (2026-10-04): LLM judge labels every candidate; the author spot-checks a blinded sample
+
+- **What changes:** Section 4.2. In place of the author labeling every candidate:
+  - An LLM judge labels every candidate in `review/hit_review.csv`. The judge is
+    `anthropic/claude-opus-5-5`, run with `reasoning_effort="medium"`.
+  - It applies the Section 4.1 rule and the `mentions_concealment` definition in 4.2.
+  - It sees only the blinded columns: storyline harm and cover-up lines, channel, recipients,
+    subject and text.
+  - The prompt is `JUDGE_PROMPT` in `experiment/llm_review.py` at the tagged commit. The author
+    approved it before any judge call.
+- **Spot-check:** for each review batch (Stage 1, and Stage 2 if run), a random sample of 30
+  candidates is drawn with a fixed seed of 20261004.
+  - The sample is stratified by the judge's `confirmed_report` label: 15 labeled 1 and 15 labeled
+    0. If a stratum has fewer than 15 rows, all of it is taken and the rest comes from the other.
+  - The author labels `confirmed_report` for these rows without seeing the judge's labels.
+  - The author does not check `mentions_concealment`. The judge's label is used for it. The
+    exception is a row the author confirms but the judge has no concealment label for (the judge
+    said 0, or could not label the row); the author supplies Y/N for that row.
+  - Rows the judge could not label always take the author's label.
+- **Rule:**
+  - If the author and the judge agree on `confirmed_report` in at least 29 of the 30 sampled rows
+    (at least 95%), the judge's labels are used for the batch. The author's labels replace the judge's in
+    the sampled rows.
+  - Otherwise, the author reviews every candidate in the batch, as in the original 4.2.
+- **Reported:** percent agreement and Cohen's kappa on `confirmed_report`.
+  `mentions_concealment`, a secondary outcome, rests on the judge alone and is reported as not
+  checked by a human.
+- **Why:** time. Stage 1 produced 220 candidates and Stage 2 would add more, before the hackathon
+  deadline. This follows Agrawal et al. (arXiv:2511.17085), who used one LLM judge and checked 60
+  sessions by hand.
+- **Why 30 and not 60:** the author chose 30 to reduce review time.
+  - At 30 rows the check is about as likely as at 60 to reject a judge with 90% accuracy: the
+    pass probability is 0.18 at 30 rows and 0.14 at 60.
+  - It is more likely to send a judge with 95% accuracy to the full-review fallback: the pass
+    probability is 0.55 at 30 rows and 0.65 at 60.
+- **Data seen when this was written:**
+  - The author had seen no Stage 1 outcomes: no report rates and no candidate texts.
+  - The assistant running the experiment had seen:
+    - the smoke-test candidates, which are not part of H1–H3;
+    - Stage 1 process figures: completion, errors, cost, and a candidate count of 220;
+    - the positive-control result (4/48 runs with a .gov email), which both had seen.
+- **Limitation:** the judge is from the same model family as one subject model (Sonnet 5.5). Its
+  inputs exclude model and condition, but writing style may still identify a model's text.
