@@ -301,3 +301,8 @@ WhistleBench by Kushal Agrawal, Frank Xiao, Guido Bergman and Asa Cooper Stickla
 ([arXiv:2511.17085](https://arxiv.org/abs/2511.17085)), MIT License, vendored at commit `9c27637`.
 See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md). Runs use
 [Inspect](https://inspect.aisi.org.uk/) 0.3.276.
+
+## License
+
+This study's code is under the MIT License ([`LICENSE`](LICENSE)). WhistleBench's code and data in
+`highagency/` keep their own MIT license ([`highagency/LICENSE`](highagency/LICENSE)).

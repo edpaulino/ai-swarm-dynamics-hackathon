@@ -1,2 +1,7 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Vendored upstream files stored with CRLF in legobridge/whistlebench@9c27637;
+# keep them byte-identical to the upstream blobs.
+highagency/whistlebench/loop_protection.py -text
+highagency/whistlebench/text_utils.py -text
